@@ -1,7 +1,9 @@
-import axios, { AxiosInstance, AxiosError, AxiosResponse } from "axios";
+import axios, { AxiosInstance, AxiosError, AxiosResponse, AxiosRequestConfig } from "axios";
 import { Readable } from "stream";
 import { HTTPError, ReadError, RequestError } from "./exceptions";
 import * as fileType from "file-type";
+import * as tunnel from "tunnel";
+import * as url from "url";
 
 const pkg = require("../package.json");
 
@@ -11,19 +13,39 @@ type httpClientConfig = {
   responseParser?: <T>(res: AxiosResponse) => T;
 };
 
+
 export default class HTTPClient {
   private instance: AxiosInstance;
   private config: httpClientConfig;
 
   constructor(config: httpClientConfig = {}) {
     this.config = config;
-    const { baseURL, defaultHeaders } = config;
-    this.instance = axios.create({
-      baseURL,
+    const {baseURL, defaultHeaders} = config;
+
+
+    let axios_setting: AxiosRequestConfig = {
+      baseURL: baseURL,
       headers: Object.assign({}, defaultHeaders, {
         "User-Agent": `${pkg.name}/${pkg.version}`,
-      }),
-    });
+      })
+    };
+
+    let proxyUrl = process.env["HTTP_INTERNET_PROXY"];
+    if (proxyUrl) {
+      let parsedProxyUrl = url.parse(proxyUrl);
+
+      const agent = tunnel.httpsOverHttp({
+        proxy: {
+          host: parsedProxyUrl.hostname,
+          port: parsedProxyUrl.port
+        },
+      });
+
+        axios_setting.httpsAgent =  agent;
+        axios_setting.proxy= false;
+      }
+
+    this.instance = axios.create(axios_setting);
 
     this.instance.interceptors.response.use(
       res => res,
